@@ -10,3 +10,4 @@ Runs on GitHub Actions (`.github/workflows/poll.yml`). The anonymous
 Waze account state is carried between runs in the Actions cache; the
 map's ingest key is the `POLL_KEY` repository secret. Latest poll
 status: [STATUS.md](STATUS.md).
+<!-- schedule registration nudge 2026-11-09 -->
