@@ -63,9 +63,36 @@ def to_records(alerts):
     return records
 
 
-def post_ingest(records, removed_count, key):
-    payload = json.dumps({"records": records,
-                          "removed_signals": removed_count}).encode()
+# Reporter-activity denominator: every alert in the snapshot (any type)
+# exists because Waze users were physically there, reporting and
+# confirming. Aggregated per ~500 m bin (same bins as the map page) so the
+# Worker can compute, per police spot, how many reports were *expected*
+# given how much reporter activity that spot actually gets — the
+# correction for "nobody was there to see it".
+BIN_LAT, BIN_LON = 0.0045, 0.006
+
+
+def activity_bins(alerts):
+    import math
+    bins = {}
+    types = {}
+    for a in alerts:
+        loc = a.get("location") or {}
+        lat, lon = loc.get("y"), loc.get("x")
+        if lat is None or lon is None:
+            continue
+        key = f"{math.floor(lat / BIN_LAT)}:{math.floor(lon / BIN_LON)}"
+        bins[key] = bins.get(key, 0) + 1
+        t = a.get("type") or "UNKNOWN"
+        types[t] = types.get(t, 0) + 1
+    return bins, types
+
+
+def post_ingest(records, removed_count, key, activity=None):
+    body = {"records": records, "removed_signals": removed_count}
+    if activity:
+        body["activity"] = activity
+    payload = json.dumps(body).encode()
     req = urllib.request.Request(
         f"{WORKER_URL}/__ingest?key={key}", data=payload,
         headers={"Content-Type": "application/json", "User-Agent": UA},
@@ -103,9 +130,14 @@ def main() -> int:
         return 1
     records = to_records(alerts_raw)
     now = datetime.now(timezone.utc)
+    bins, types = activity_bins(alerts_raw)
+    # EST is the map's fixed display offset (UTC-5), same as the page.
+    hour_est = (now.hour - 5) % 24
+    activity = {"hour_est": hour_est, "bins": bins, "types": types,
+                "snapshot_alerts": sum(bins.values())}
     result = None
     try:
-        result = post_ingest(records, len(removed), key)
+        result = post_ingest(records, len(removed), key, activity)
     except Exception as e:
         # The ingest connection sometimes drops after the merge has already
         # landed server-side; verify against the live map before failing.
@@ -135,6 +167,8 @@ def main() -> int:
     print(json.dumps({"ok": True, "police_in_snapshot": len(records),
                       "new_unique": result.get("new_unique"),
                       "total_unique": total,
+                      "activity_bins": len(bins),
+                      "snapshot_alerts": activity["snapshot_alerts"],
                       "removed_signals": len(removed)}))
     return 0
 
