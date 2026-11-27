@@ -1,5 +1,5 @@
 # GTA police poller
 
-Last poll: 2026-11-27 20:03 UTC — 54 police in snapshot, 41125 total unique reports on the live map.
+Last poll: 2026-11-27 20:18 UTC — 48 police in snapshot, 41150 total unique reports on the live map.
 
 Live map: https://gta-police-worker.filip-pauzenberger.workers.dev
